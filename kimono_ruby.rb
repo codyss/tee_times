@@ -3,8 +3,11 @@ require 'rest_client'
 COURSES = {
     'NY Country Club' => 'new-york-country-club-new-york',
     'Galloping Hills' => 'galloping-hill-golf-course-new-jersey'
+    'Richter Park' => 'richter-park-golf-course-connecticut'
+    'Sterling-Farms' => 'sterling-farms-golf-course-connecticut'
 }
 
+#richter-park-golf-course-connecticut,sterling-farms-golf-course-connecticut,hudson-hills-golf-course-new-york,south-bay-country-club-new-york,tallgrass-golf-club-new-york,new-york-country-club-new-york,patriot-hills-golf-club-new-york,river-vale-country-club-new-jersey,lido-golf-club-new-york,berkshire-valley-golf-course-new-jersey,galloping-hill-golf-course-new-jersey,wind-watch-golf-course-new-york,stonebridge-golf-links-country-club-new-york
 
 def kimono_search(course, date)
     response_on_demand = RestClient.get "https://www.kimonolabs.com/api/ondemand/7m3qocvk?apikey=REK0Ffj1XIg1BhGMU3wDHLBv9kQbB2ur&kimpath5=#{date}&kimpath3=#{course}"
