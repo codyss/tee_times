@@ -2,21 +2,42 @@ require 'rest_client'
 
 COURSES = {
     'NY Country Club' => 'new-york-country-club-new-york',
-    'Galloping Hills' => 'galloping-hill-golf-course-new-jersey'
-    'Richter Park' => 'richter-park-golf-course-connecticut'
-    'Sterling-Farms' => 'sterling-farms-golf-course-connecticut'
+    'Galloping Hills' => 'galloping-hill-golf-course-new-jersey',
+    'Richter Park' => 'richter-park-golf-course-connecticut',
+    'Sterling Farms' => 'sterling-farms-golf-course-connecticut',
+    'Hudson Hills' => 'hudson-hills-golf-course-new-york',
+    'Middle Bay' => 'south-bay-country-club-new-york',
+    'Tallgrass' => 'tallgrass-golf-club-new-york',
+    'Patriot Hills' => 'patriot-hills-golf-club-new-york',
+    'River Vale' => 'river-vale-country-club-new-jersey',
+    'Lido' => 'lido-golf-club-new-york',
+    'Berkshire Valley' => 'berkshire-valley-golf-course-new-jersey',
+    'Wind Watch' => 'wind-watch-golf-course-new-york',
+    'Stonebridge' => 'wind-watch-golf-course-new-york'
 }
 
-#richter-park-golf-course-connecticut,sterling-farms-golf-course-connecticut,hudson-hills-golf-course-new-york,south-bay-country-club-new-york,tallgrass-golf-club-new-york,new-york-country-club-new-york,patriot-hills-golf-club-new-york,river-vale-country-club-new-jersey,lido-golf-club-new-york,berkshire-valley-golf-course-new-jersey,galloping-hill-golf-course-new-jersey,wind-watch-golf-course-new-york,stonebridge-golf-links-country-club-new-york
 
 def kimono_search(course, date)
     response_on_demand = RestClient.get "https://www.kimonolabs.com/api/ondemand/7m3qocvk?apikey=REK0Ffj1XIg1BhGMU3wDHLBv9kQbB2ur&kimpath5=#{date}&kimpath3=#{course}"
     times = JSON.parse(response_on_demand)["results"]["collection1"]
 end
 
+def kimono_search_full
+    response_on_demand = RestClient.get "https://www.kimonolabs.com/api/4ujite74?apikey=REK0Ffj1XIg1BhGMU3wDHLBv9kQbB2ur"
+    times = JSON.parse(response_on_demand)["results"]["collection1"]
+end
 
-#search could save times to database and then only 
-#search for additional times if time is over e.g. 30 min
+def parse_big_search(course, date)
+    #add a function that pulls in the big listing
+
+end
+
+def start_update_pull(course, date)
+    #do a kimomo on demand pull for the specific user request
+
+end
+
+
 
 def remove_duplicates(times_list, clean_times=[])
     #removes the duplicates, keeping the more expensive times for times_list returning clean_times
@@ -54,17 +75,25 @@ def find_time
     gets.strip
 end
 
+def no_times
+#need a function that identifies when there are no times on a given day
+end
+
 def search_for_time(times, r)
-    times.detect do |x| 
-        tee_time_f = x['time'][0,x['time'].index(':')+1].to_i + x['time'][-2,2].to_f / 100
-        request_time_f = r[0,r.index(':')+1].to_i + r[-2,2].to_f / 100
-        tee_time_f >= request_time_f
+    if times == {}
+        {'num_players'=> '0', 'time'=> 'None'}
+    else
+        times.detect do |x| 
+            tee_time_f = x['time'][0,x['time'].index(':')+1].to_i + x['time'][-2,2].to_f / 100
+            request_time_f = r[0,r.index(':')+1].to_i + r[-2,2].to_f / 100
+            tee_time_f >= request_time_f
+        end
     end
         #{|x| x['time'] >= request.}
 # convert hour to number, minutes to decimal
 end
 
-def time_to_military(times)
+def time_to_military(time)
     for i in times
         if i['time'][-2,2] == 'PM'
             if i['time'][0,2] == '12'
@@ -73,13 +102,15 @@ def time_to_military(times)
                 i['time'] = i['time'][0,i['time'].length-3]
                 i['time'][0,2] = (i['time'][0,1].to_i + 12).to_s
             end
+        elsif i['time'][0,2] == '12'
+            i['time'] = i['time'][0,i['time'].length-3]
+            i['time'][0,2] = (i['time'][0,1].to_i - 12).to_s
         else
             i['time'] = i['time'][0,i['time'].length-3]
         end
     end
     times
 end
-
 
 def pretty_print(time)
     #prints out the number of players at the time
