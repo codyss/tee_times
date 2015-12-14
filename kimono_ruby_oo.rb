@@ -1,5 +1,6 @@
 require 'rest_client'
 require 'mongo'
+require 'pry'
 
 COURSES = {
     'NY Country Club' => 'new-york-country-club-new-york',
@@ -45,6 +46,10 @@ class TeeTimeSearch
 
     def times_update
         @times_update
+    end
+
+    def view_clean_times
+        @clean_times
     end
 
     def on_demand
@@ -149,7 +154,7 @@ end
 
 class UserSearch
     def initialize(times)
-        @times = times.view_times
+        @times = times
         @times_course_date = []
         @times_on_demand = []
     end
@@ -257,17 +262,15 @@ end
 
 class LocalTimesDB
     def initialize
-        client = Mongo::Client.new([ '127.0.0.1:27017' ], :database => 'tee_times')
-        @times_to_save = []
-
+        @client = Mongo::Client.new([ '127.0.0.1:27017' ], :database => 'tee_times')
     end
 
     def times_to_save=(times_to_save)
-        @times_to_save
+        @times_to_save = times_to_save.view_clean_times
     end
 
     def save_times
-        result = client[:tee_times].insert_many(@times_to_save)
+        result = @client[:tee_times].insert_many(@times_to_save)
     end
 
     def course=(course)
@@ -279,7 +282,7 @@ class LocalTimesDB
     end
 
     def find_times
-        @times = client[:tee_times].find('course' => @course, 'date' => @date)
+        @times = @client[:tee_times].find()
     end
 
 end
@@ -288,29 +291,21 @@ end
 
 
 def search
-    
-    #course = course_search_to_long_name
-    #date = date_request
-    #puts "Hold while we search for times..."
-    #raw_times = kimono_search(course, date)
-    #puts "Tee times available"
-    #times = time_to_military(num_players(remove_duplicates(raw_times)))
-    #pretty_print(search_for_time(times, find_time))
 
-    #get the latest times
-    times = TeeTimeSearch.new
-    times.full_search
-    times.cleaning
+    #get the latest times - changed to pull from database
+    #times = TeeTimeSearch.new
+    #times.full_search
+    #times.cleaning
 
-    #download the times to the local database
-    local_times = LocalTimesDB.new
-    local_times.times_to_save = times
-    local_times.save_times
-    local_times.find_times
-
+    times = LocalTimesDB.new
+    tee_times = times.find_times
 
     #search should be on the local db, updates of the local db can be run regulary
-    search = UserSearch.new(local_times)
+    #can change back to initialize on times to make mongo work better
+    
+
+
+    search = UserSearch.new(tee_times)
     search.date_request
     search.course_search_to_long_name
     #run the on-demand tee times to confirm available
@@ -329,3 +324,14 @@ def search
 
 end
 
+def update_db
+    times = TeeTimeSearch.new
+    times.full_search
+    times.cleaning
+    puts "times downloaded"
+
+    #download the times to the local database
+    local_times = LocalTimesDB.new
+    local_times.times_to_save = times
+    local_times.save_times
+end
