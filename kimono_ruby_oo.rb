@@ -1,4 +1,5 @@
 require 'rest_client'
+require 'mongo'
 
 COURSES = {
     'NY Country Club' => 'new-york-country-club-new-york',
@@ -42,6 +43,10 @@ class TeeTimeSearch
         @times_list
     end
 
+    def times_update
+        @times_update
+    end
+
     def on_demand
         response_on_demand = RestClient.get "https://www.kimonolabs.com/api/ondemand/4ujite74?apikey=REK0Ffj1XIg1BhGMU3wDHLBv9kQbB2ur&kimpath5=#{@date}&kimpath3=#{@course}"
         @times_update = JSON.parse(response_on_demand)["results"]["collection1"]
@@ -51,7 +56,6 @@ class TeeTimeSearch
         response = RestClient.get "https://www.kimonolabs.com/api/4ujite74?apikey=REK0Ffj1XIg1BhGMU3wDHLBv9kQbB2ur"
         @times_list = JSON.parse(response)["results"]["collection1"]
     end
-
 
     def start_update_pull
         #do a kimomo on demand pull for the user request to confirm that the requests match, and can update the full data set
@@ -110,12 +114,20 @@ class TeeTimeSearch
 
     def pull_out_course_date
         #function should pull out the course and the date for easy searching
-        #find 
+        #function works on the full pull
         for i in @clean_times
             i['course'] = i['url'][i['url'].index('/at/')+4..i['url'].index('/on/')-1]
             i['date'] = i['url'][i['url'].index('/on/')+4..i['url'].length]
         end
         @clean_times
+    end
+
+    def label_course_date(course, date)
+        for i in @times_update
+            i['course'] = course
+            i['date'] = date
+        end
+        times_update
     end
 
     def cleaning
@@ -125,6 +137,13 @@ class TeeTimeSearch
         pull_out_course_date
     end
 
+    def on_demand_cleaning
+        remove_duplicates
+        num_players
+        time_to_military
+        label_course_date
+    end
+
 end
 
 
@@ -132,6 +151,7 @@ class UserSearch
     def initialize(times)
         @times = times.view_times
         @times_course_date = []
+        @times_on_demand = []
     end
 
     def view
@@ -146,11 +166,17 @@ class UserSearch
         @date
     end
 
+    def times_on_demand=(times_on_demand)
+        @times_on_demand = times_on_demand
+    end
+
     def find_time
         #prompts the user for a time they would like to play and returns their request time
         puts ""
         puts "What time do you want to play? HH:MM military format e.g. 14:30"
         @time_request = gets.strip
+        puts "How many players in your group?"
+        @players = gets.strip
     end
 
     def no_times
@@ -168,7 +194,7 @@ class UserSearch
         if @times == {}
         else
             @times.each do |x| 
-                if x['course'] == @course && x['date'] == @date
+                if x['course'] == @course && x['date'] == @date  && x['num_players'].to_i >= @players.to_i
                     @times_course_date << x
                 end
             end
@@ -178,8 +204,8 @@ class UserSearch
 
 
     def search_for_time
-        if @times_course_date == []
-            {'num_players'=> '0', 'time'=> 'None'}
+        if @times_course_date.length < 1
+            @time = {'num_players'=> '0', 'time'=> 'None'}
         else
             @time = @times_course_date.detect do |x| 
                 tee_time_i = x['time'].to_i
@@ -211,9 +237,13 @@ class UserSearch
 
     def pretty_print
         #prints out the number of players at the time
-        players = @time['num_players']
-        tee_time = @time['time']
-        puts "Nearest time available is a tee time for #{players} player#{'s' if players.to_i > 1} at #{tee_time}"
+        if @time['num_players'] == '0'
+            puts "No times available that meet your request"
+        else
+            players = @time['num_players']
+            tee_time = @time['time']
+            puts "Nearest time available is a tee time for #{players} player#{'s' if players.to_i > 1} at #{tee_time}"
+        end
     end    
 
     def date_request
@@ -222,6 +252,36 @@ class UserSearch
         #@times.on_demand_date=(@date)
         #@times.on_demand_course=(@course)
     end
+end
+
+
+class LocalTimesDB
+    def initialize
+        client = Mongo::Client.new([ '127.0.0.1:27017' ], :database => 'tee_times')
+        @times_to_save = []
+
+    end
+
+    def times_to_save=(times_to_save)
+        @times_to_save
+    end
+
+    def save_times
+        result = client[:tee_times].insert_many(@times_to_save)
+    end
+
+    def course=(course)
+        @course = course
+    end
+
+    def date=(date)
+        @date = date
+    end
+
+    def find_times
+        @times = client[:tee_times].find('course' => @course, 'date' => @date)
+    end
+
 end
 
 
@@ -237,16 +297,30 @@ def search
     #times = time_to_military(num_players(remove_duplicates(raw_times)))
     #pretty_print(search_for_time(times, find_time))
 
-
+    #get the latest times
     times = TeeTimeSearch.new
     times.full_search
     times.cleaning
 
-    search = UserSearch.new(times)
+    #download the times to the local database
+    local_times = LocalTimesDB.new
+    local_times.times_to_save = times
+    local_times.save_times
+    local_times.find_times
+
+
+    #search should be on the local db, updates of the local db can be run regulary
+    search = UserSearch.new(local_times)
     search.date_request
     search.course_search_to_long_name
-    search.filter_course_date
+    #run the on-demand tee times to confirm available
+    #times.on_demand_course=search.course
+    #times.on_demand_date=search.date
+    #times.on_demand
+    #times.label_course_date(search.course, search.date)
+    #search.times_on_demand=times.times_update
     search.find_time
+    search.filter_course_date
     search.search_for_time
     search.pretty_print
 
