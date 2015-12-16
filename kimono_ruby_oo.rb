@@ -1,6 +1,6 @@
 require 'rest_client'
 require 'mongo'
-require 'pry'
+
 
 COURSES = {
     'NY Country Club' => 'new-york-country-club-new-york',
@@ -19,37 +19,12 @@ COURSES = {
 }
 
 class TeeTimeSearch
+    attr_accessor :course, :date
+    attr_reader :times_list, :times_update, :clean_times 
+
     def initilize
         @times_list = []
         @times_update = []
-    end
-
-    def on_demand_course=(course)
-        @course = course
-    end
-
-    def course
-        @course
-    end
-
-    def on_demand_date=(date)
-        @date = date
-    end
-
-    def date
-        @date
-    end
-
-    def view_times
-        @times_list
-    end
-
-    def times_update
-        @times_update
-    end
-
-    def view_clean_times
-        @clean_times
     end
 
     def on_demand
@@ -59,12 +34,8 @@ class TeeTimeSearch
 
     def full_search
         response = RestClient.get "https://www.kimonolabs.com/api/4ujite74?apikey=REK0Ffj1XIg1BhGMU3wDHLBv9kQbB2ur"
+        @times_full_data = JSON.parse(response)
         @times_list = JSON.parse(response)["results"]["collection1"]
-    end
-
-    def start_update_pull
-        #do a kimomo on demand pull for the user request to confirm that the requests match, and can update the full data set
-        #going to set course and date in User Search class, then just run a on-demand pull with the course and date        
     end
 
     def remove_duplicates
@@ -87,22 +58,22 @@ class TeeTimeSearch
 
     def num_players
         #takes list of times and cleans data to show number of players
-        for i in @clean_times
+        @clean_times.map do |i|
             i['players'].each_with_index do |item, index|
                 if item['class'].include?('blue')
                     i['num_players'] = index + 1
                 end
             end
         end
-        @clean_times
     end
 
 
     def time_to_military
-        for i in @clean_times
+        @clean_times.map do |i|
             if i['time'][-2,2] == 'PM'
                 if i['time'][0,2] == '12'
                     i['time'] = i['time'][0,i['time'].length-3]
+                    i['time'] = i['time'].delete(':')
                 else
                     i['time'] = i['time'][0,i['time'].length-3]
                     i['time'][0,2] = (i['time'][0,1].to_i + 12).to_s
@@ -112,14 +83,14 @@ class TeeTimeSearch
                 i['time'][0,2] = (i['time'][0,1].to_i - 12).to_s
             else
                 i['time'] = i['time'][0,i['time'].length-3]
+                i['time'] = i['time'].delete(':')
             end
         end
-        @clean_times
     end
 
     def pull_out_course_date
-        #function should pull out the course and the date for easy searching
-        #function works on the full pull
+        #method should pull out the course and the date for easy searching
+        #method works on the full pull
         for i in @clean_times
             i['course'] = i['url'][i['url'].index('/at/')+4..i['url'].index('/on/')-1]
             i['date'] = i['url'][i['url'].index('/on/')+4..i['url'].length]
@@ -128,11 +99,25 @@ class TeeTimeSearch
     end
 
     def label_course_date(course, date)
-        for i in @times_update
+        #method adds the name of the course and the date to each tee time record
+        @times_update.map do |i|
             i['course'] = course
             i['date'] = date
         end
-        times_update
+    end
+
+    def label_version_run_time
+        @clean_times.map {|i| i['version_run_time'] = @times_full_data['thisversionrun']}
+    end
+
+    def kimono_records_count
+        #returns the number of records in the first kimono search
+        @times_full_data['count']
+    end
+
+    def count_tee_times
+        #returns the number of tee times in the clean times list
+        @clean_times.length
     end
 
     def cleaning
@@ -140,6 +125,7 @@ class TeeTimeSearch
         num_players
         time_to_military
         pull_out_course_date
+        label_version_run_time
     end
 
     def on_demand_cleaning
@@ -153,22 +139,12 @@ end
 
 
 class UserSearch
+    attr_reader :times, :course, :date
+
     def initialize(times)
         @times = times
         @times_course_date = []
         @times_on_demand = []
-    end
-
-    def view
-        @times
-    end
-
-    def course
-        @course
-    end
-
-    def date
-        @date
     end
 
     def times_on_demand=(times_on_demand)
@@ -185,7 +161,7 @@ class UserSearch
     end
 
     def no_times
-        #need a function that identifies when there are no times at course that day
+        #need a method that identifies when there are no times at course that day
         if @times_course_date == []
             true
         else
@@ -195,7 +171,7 @@ class UserSearch
 
 
     def filter_course_date
-        #after pull out course date function, this will search the times fed to it based on the course, date provided by user
+        #after pull out course date method, this will search the times fed to it based on the course, date provided by user
         if @times == {}
         else
             @times.each do |x| 
@@ -214,7 +190,7 @@ class UserSearch
         else
             @time = @times_course_date.detect do |x| 
                 tee_time_i = x['time'].to_i
-                request_time_i = @time_request[0,@time_request.index(':')+1].to_i + @time_request[-2,2].to_i
+                request_time_i = @time_request[0,@time_request.index(':')+1].to_i*100 + @time_request[-2,2].to_i
                 tee_time_i >= request_time_i
             end
         end
@@ -252,37 +228,42 @@ class UserSearch
     end    
 
     def date_request
-        puts "What date would you like to play? (mmm-DD) e.g. dec-11 "
+        puts "What date would you like to play? (mmm-DD)"
         @date = gets.strip
-        #@times.on_demand_date=(@date)
-        #@times.on_demand_course=(@course)
     end
 end
 
 
 class LocalTimesDB
+    attr_accessor :course, :date
+
     def initialize
         @client = Mongo::Client.new([ '127.0.0.1:27017' ], :database => 'tee_times')
+        @times_collection = @client[:tee_times]
     end
 
     def times_to_save=(times_to_save)
-        @times_to_save = times_to_save.view_clean_times
+        @times_to_save = times_to_save.clean_times
     end
 
     def save_times
-        result = @client[:tee_times].insert_many(@times_to_save)
-    end
-
-    def course=(course)
-        @course = course
-    end
-
-    def date=(date)
-        @date = date
+        result = @times_collection.insert_many(@times_to_save)
     end
 
     def find_times
-        @times = @client[:tee_times].find()
+        @times = @times_collection.find()
+    end
+
+    def delete_prior_download
+        #removes the current download from the live times collection
+        result = @times_collection.delete_many
+    end
+
+    def archive_old_times
+        #need to add an identifiying information to each tee time saved - like when it was pulled
+        find_times
+        @archived_times = @client[:archived_tee_times]
+        @archived_times.insert_many(@times)
     end
 
 end
@@ -293,27 +274,18 @@ end
 def search
 
     #get the latest times - changed to pull from database
-    #times = TeeTimeSearch.new
-    #times.full_search
-    #times.cleaning
 
     times = LocalTimesDB.new
     tee_times = times.find_times
 
     #search should be on the local db, updates of the local db can be run regulary
     #can change back to initialize on times to make mongo work better
-    
 
 
     search = UserSearch.new(tee_times)
     search.date_request
     search.course_search_to_long_name
-    #run the on-demand tee times to confirm available
-    #times.on_demand_course=search.course
-    #times.on_demand_date=search.date
-    #times.on_demand
-    #times.label_course_date(search.course, search.date)
-    #search.times_on_demand=times.times_update
+
     search.find_time
     search.filter_course_date
     search.search_for_time
@@ -328,10 +300,13 @@ def update_db
     times = TeeTimeSearch.new
     times.full_search
     times.cleaning
-    puts "times downloaded"
+    puts "#{times.count_tee_times} times downloaded"
 
     #download the times to the local database
+    #should move old times to an archive
     local_times = LocalTimesDB.new
+    local_times.archive_old_times
+    local_times.delete_prior_download
     local_times.times_to_save = times
     local_times.save_times
 end

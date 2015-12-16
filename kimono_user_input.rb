@@ -1,16 +1,20 @@
 require_relative 'kimono_ruby_oo'
 require 'rest_client'
 
+prompt = "Tee time search running 1) Look for some times, 2) Update db, 3) Quit"
 
-
-puts "Looking for some 1) times or a 2) db update"
+puts prompt
 choice = gets.strip
 
-if choice.to_i == 1
-    puts "Let's find you a tee time"
-    search
-else
-    puts "Going to update the local db"
-    update_db
+while choice.to_i != 3 
+    if choice.to_i == 1
+        puts "Let's find you a tee time"
+        search
+    else
+        puts "Going to update the local db"
+        update_db
+    end
+    puts prompt
+    choice = gets.strip
 end
 
